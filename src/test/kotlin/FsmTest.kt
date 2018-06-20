@@ -1,5 +1,6 @@
+
 import assertk.assert
-import assertk.assertions.*
+import assertk.assertions.isEqualTo
 import org.junit.Test
 
 class FsmTest {
@@ -30,6 +31,7 @@ class FsmTest {
             }
         }
 
+        println(sm)
         val next = sm.dispatch(MyEvent.EventA)
         assert(next).isEqualTo(MyState.StateC)
     }
