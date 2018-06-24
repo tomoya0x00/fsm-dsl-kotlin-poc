@@ -5,25 +5,47 @@ interface BaseEvent
 // TODO: detect errors at compile time
 // TODO: reconsidering how to write edges
 
-class StateMachine(initial: BaseState) {
-
-    private val fsmContext = FsmContext(initial)
-    val children: MutableList<State> = mutableListOf()
-
+class StateMachine(
+        private var fsmContext: FsmContext,
+        private val stateMap: Map<BaseState, State>
+) {
     fun dispatch(event: BaseEvent): BaseState {
-        // TODO: return new state
-        return fsmContext.dispatch(event, children)
+        return fsmContext.dispatch(event, stateMap)
     }
 
-    override fun toString(): String {
-        return "StateMachine\n" +
-                children.joinToString("\n") { it.toString() }.prependIndent("  ")
+    class Builder(initial: BaseState) {
+        val fsmContext = FsmContext(initial)
+        val root = State(state = object : BaseState {})
+
+        fun build(): StateMachine {
+            println(this) // for debug
+            val stateMap = mutableMapOf<BaseState, State>()
+            root.allChildren.forEach { (bs, s) ->
+                // TODO: detect duplicate state
+                stateMap[bs] = s
+            }
+
+            return StateMachine(fsmContext, stateMap)
+        }
+
+        override fun toString(): String {
+            return "StateMachine\n" +
+                    root.children.joinToString("\n") { it.toString() }.prependIndent("  ")
+        }
     }
 }
 
-class State(val state: BaseState, val entry: () -> Unit, val exit: () -> Unit) {
+class State(
+        val parent: State? = null,
+        val state: BaseState,
+        val entry: () -> Unit = {},
+        val exit: () -> Unit = {}
+) {
     val children: MutableList<State> = mutableListOf()
     val edges: MutableList<Edge> = mutableListOf()
+
+    val allChildren: List<Pair<BaseState, State>>
+        get() = children.map { it.allChildren }.flatMap { it } + children.map { Pair(it.state, it) }
 
     override fun toString(): String {
         return "${state.javaClass.simpleName}\n" +
@@ -43,48 +65,35 @@ class FsmContext(initial: BaseState) {
     var state: BaseState = initial
         private set
 
-    fun dispatch(event: BaseEvent, children: List<State>): BaseState {
+    fun dispatch(event: BaseEvent, stateMap: Map<BaseState, State>): BaseState {
         val prev = state
-        val next = findEdgeRecursive(children, event)?.next ?: prev
-        state = next
+
+       state = stateMap[prev]?.let {
+            it.edges.firstOrNull { it.event == event }?.next
+        } ?: prev
 
         return state
     }
-
-    // TODO: tailrec
-    private fun findEdgeRecursive(states: List<State>, event: BaseEvent): Edge? {
-        return states.findEdge(event) ?: kotlin.run {
-            var edge: Edge? = null
-            states.forEach {
-                edge = findEdgeRecursive(it.children, event)
-                if (edge != null) return@run edge
-            }
-            return@run edge
-        }
-    }
-
-    private fun List<State>.findEdge(event: BaseEvent): Edge? =
-            this.flatMap { it.edges }.firstOrNull { it.event == event }
 }
 
 fun stateMachine(
         initial: BaseState,
-        init: StateMachine.() -> Unit
-): StateMachine = StateMachine(initial = initial).apply(init)
+        init: StateMachine.Builder.() -> Unit
+): StateMachine = StateMachine.Builder(initial = initial).apply(init).build()
 
-fun StateMachine.state(
+fun StateMachine.Builder.state(
         state: BaseState,
         entry: () -> Unit = {},
         exit: () -> Unit = {},
         init: State.() -> Unit = {}
-) = this.children.add(State(state = state, entry = entry, exit = exit).apply(init))
+) = this.root.children.add(State(parent = this.root, state = state, entry = entry, exit = exit).apply(init))
 
 fun State.state(
         state: BaseState,
         entry: () -> Unit = {},
         exit: () -> Unit = {},
         init: State.() -> Unit = {}
-) = this.children.add(State(state = state, entry = entry, exit = exit).apply(init))
+) = this.children.add(State(parent = this, state = state, entry = entry, exit = exit).apply(init))
 
 fun State.edge(
         event: BaseEvent,

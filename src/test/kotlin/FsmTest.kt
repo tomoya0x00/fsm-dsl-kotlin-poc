@@ -31,7 +31,6 @@ class FsmTest {
             }
         }
 
-        println(sm)
         val next = sm.dispatch(MyEvent.EventA)
         assert(next).isEqualTo(MyState.StateC)
     }
