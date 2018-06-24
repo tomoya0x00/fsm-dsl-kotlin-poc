@@ -14,7 +14,7 @@ class StateMachine(
     }
 
     class Builder(initial: BaseState) {
-        val fsmContext = FsmContext(initial)
+        private val fsmContext = FsmContext(initial)
         val root = State(state = object : BaseState {})
 
         fun build(): StateMachine {
@@ -25,7 +25,36 @@ class StateMachine(
                 stateMap[bs] = s
             }
 
+            val transitionMap = mutableMapOf<BaseState, MutableMap<BaseEvent, Transition>>()
+            root.allEdges.forEach { (bs, e) ->
+                if (!transitionMap.contains(bs)) transitionMap[bs] = mutableMapOf()
+
+                // TODO: detect duplicate event
+                // TODO: generate action list
+                transitionMap[bs]?.set(e.event, Transition(next = e.next))
+            }
+
             return StateMachine(fsmContext, stateMap)
+        }
+
+        private fun breadthFirstSearch(state: BaseState, root: State): Boolean {
+            val markedStates = mutableListOf<BaseState>()
+            val queue = mutableListOf<State>()
+
+            markedStates += root.state
+            queue += root
+            while (!queue.isEmpty()) {
+                val v = queue.removeAt(0)
+                if (v.state == state) return true
+                v.children.forEach { chState ->
+                    if (markedStates.none { it == chState.state }) {
+                        markedStates += chState.state
+                        queue += chState
+                    }
+                }
+            }
+
+            return false
         }
 
         override fun toString(): String {
@@ -33,6 +62,8 @@ class StateMachine(
                     root.children.joinToString("\n") { it.toString() }.prependIndent("  ")
         }
     }
+
+    data class Transition(val next: BaseState, val actions: List<() -> Unit> = listOf())
 }
 
 class State(
@@ -46,6 +77,9 @@ class State(
 
     val allChildren: List<Pair<BaseState, State>>
         get() = children.map { it.allChildren }.flatMap { it } + children.map { Pair(it.state, it) }
+
+    val allEdges: List<Pair<BaseState, Edge>>
+        get() = children.map { it.allEdges }.flatMap { it } + edges.map { Pair(this.state, it) }
 
     override fun toString(): String {
         return "${state.javaClass.simpleName}\n" +
@@ -68,7 +102,7 @@ class FsmContext(initial: BaseState) {
     fun dispatch(event: BaseEvent, stateMap: Map<BaseState, State>): BaseState {
         val prev = state
 
-       state = stateMap[prev]?.let {
+        state = stateMap[prev]?.let {
             it.edges.firstOrNull { it.event == event }?.next
         } ?: prev
 
