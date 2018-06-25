@@ -1,16 +1,12 @@
 interface BaseState
 interface BaseEvent
 
-// TODO: support context
-// TODO: detect errors at compile time
-// TODO: reconsidering how to write edges
-
 class StateMachine(
         private var fsmContext: FsmContext,
-        private val stateMap: Map<BaseState, State>
+        private val transitionMap: Map<BaseState, Map<BaseEvent, Transition>>
 ) {
     fun dispatch(event: BaseEvent): BaseState {
-        return fsmContext.dispatch(event, stateMap)
+        return fsmContext.dispatch(event, transitionMap)
     }
 
     class Builder(initial: BaseState) {
@@ -19,22 +15,18 @@ class StateMachine(
 
         fun build(): StateMachine {
             println(this) // for debug
-            val stateMap = mutableMapOf<BaseState, State>()
-            root.allChildren.forEach { (bs, s) ->
-                // TODO: detect duplicate state
-                stateMap[bs] = s
-            }
 
             val transitionMap = mutableMapOf<BaseState, MutableMap<BaseEvent, Transition>>()
             root.allEdges.forEach { (bs, e) ->
                 if (!transitionMap.contains(bs)) transitionMap[bs] = mutableMapOf()
 
                 // TODO: detect duplicate event
-                // TODO: generate action list
-                transitionMap[bs]?.set(e.event, Transition(next = e.next))
+                // TODO: generate all action list
+                val actions: List<() -> Unit> = listOf(e.action)
+                transitionMap[bs]?.set(e.event, Transition(next = e.next, actions = actions))
             }
 
-            return StateMachine(fsmContext, stateMap)
+            return StateMachine(fsmContext, transitionMap)
         }
 
         private fun breadthFirstSearch(state: BaseState, root: State): Boolean {
@@ -75,9 +67,6 @@ class State(
     val children: MutableList<State> = mutableListOf()
     val edges: MutableList<Edge> = mutableListOf()
 
-    val allChildren: List<Pair<BaseState, State>>
-        get() = children.map { it.allChildren }.flatMap { it } + children.map { Pair(it.state, it) }
-
     val allEdges: List<Pair<BaseState, Edge>>
         get() = children.map { it.allEdges }.flatMap { it } + edges.map { Pair(this.state, it) }
 
@@ -99,12 +88,12 @@ class FsmContext(initial: BaseState) {
     var state: BaseState = initial
         private set
 
-    fun dispatch(event: BaseEvent, stateMap: Map<BaseState, State>): BaseState {
-        val prev = state
-
-        state = stateMap[prev]?.let {
-            it.edges.firstOrNull { it.event == event }?.next
-        } ?: prev
+    fun dispatch(event: BaseEvent, transitionMap: Map<BaseState, Map<BaseEvent, StateMachine.Transition>>): BaseState {
+        val transition = transitionMap[state]?.let { it[event] }
+        transition?.run {
+            actions.forEach { it() }
+            state = next
+        }
 
         return state
     }

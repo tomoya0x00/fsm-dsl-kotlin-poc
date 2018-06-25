@@ -21,13 +21,17 @@ class FsmTest {
         val sm = stateMachine(initial = MyState.StateA) {
             state(MyState.StateA, entry = {}, exit = {}) {
 
-                edge(MyEvent.EventA, next = MyState.StateC) { /* action */ }
+                edge(MyEvent.EventA, next = MyState.StateC) {
+                    println("EventA! -> StateC")
+                }
 
                 state(MyState.StateB, entry = {}, exit = {})
             }
 
             state(MyState.StateC, entry = {}, exit = {}) {
-                edge(MyEvent.EventB, next = MyState.StateA) { /* action */ }
+                edge(MyEvent.EventB, next = MyState.StateA) {
+                    println("EventB! -> StateA")
+                }
             }
         }
 
