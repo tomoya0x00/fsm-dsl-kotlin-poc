@@ -102,24 +102,35 @@ class FsmContext(initial: BaseState) {
 fun stateMachine(
         initial: BaseState,
         init: StateMachine.Builder.() -> Unit
-): StateMachine = StateMachine.Builder(initial = initial).apply(init).build()
+): StateMachine = StateMachine.Builder(initial = initial)
+        .apply(init).build()
 
 fun StateMachine.Builder.state(
         state: BaseState,
         entry: () -> Unit = {},
         exit: () -> Unit = {},
         init: State.() -> Unit = {}
-) = this.root.children.add(State(parent = this.root, state = state, entry = entry, exit = exit).apply(init))
+) = this.root.children.add(State(
+        parent = this.root, state = state,
+        entry = entry, exit = exit
+).apply(init))
 
 fun State.state(
         state: BaseState,
         entry: () -> Unit = {},
         exit: () -> Unit = {},
         init: State.() -> Unit = {}
-) = this.children.add(State(parent = this, state = state, entry = entry, exit = exit).apply(init))
+) = this.children.add(State(
+        parent = this, state = state,
+        entry = entry, exit = exit
+).apply(init))
 
 fun State.edge(
         event: BaseEvent,
         next: BaseState,
         action: () -> Unit = {}
-) = this.edges.add(Edge(event = event, next = next, action = action))
+) = this.edges.add(Edge(
+        event = event,
+        next = next,
+        action = action
+))

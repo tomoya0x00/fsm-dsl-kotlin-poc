@@ -1,4 +1,3 @@
-
 import assertk.assert
 import assertk.assertions.isEqualTo
 import org.junit.Test
@@ -6,36 +5,39 @@ import org.junit.Test
 class FsmTest {
 
     sealed class MyState : BaseState {
-        object StateA : MyState()
-        object StateB : MyState()
-        object StateC : MyState()
+        object NotLoaned : MyState()
+        object OnLoan : MyState()
+        object Lock : MyState()
+        object UnLock : MyState()
     }
 
     sealed class MyEvent : BaseEvent {
-        object EventA : MyEvent()
-        object EventB : MyEvent()
+        object PressRental : MyEvent()
+        object PressReturn : MyEvent()
+        object PressLock : MyEvent()
+        object PressUnLock : MyEvent()
     }
 
     @Test
     fun test() {
-        val sm = stateMachine(initial = MyState.StateA) {
-            state(MyState.StateA, entry = {}, exit = {}) {
-
-                edge(MyEvent.EventA, next = MyState.StateC) {
-                    println("EventA! -> StateC")
-                }
-
-                state(MyState.StateB, entry = {}, exit = {})
+        val sm = stateMachine(initial = MyState.NotLoaned) {
+            state(MyState.NotLoaned) {
+                edge(MyEvent.PressRental, next = MyState.Lock)
             }
-
-            state(MyState.StateC, entry = {}, exit = {}) {
-                edge(MyEvent.EventB, next = MyState.StateA) {
-                    println("EventB! -> StateA")
+            state(MyState.OnLoan,
+                    entry = { println("turnOnRentalLed") },
+                    exit = { println("turnOffRentalLed") }) {
+                state(MyState.Lock) {
+                    edge(MyEvent.PressReturn, next = MyState.NotLoaned)
+                    edge(MyEvent.PressUnLock, next = MyState.UnLock)
+                }
+                state(MyState.UnLock) {
+                    edge(MyEvent.PressLock, next = MyState.Lock)
                 }
             }
         }
 
-        val next = sm.dispatch(MyEvent.EventA)
-        assert(next).isEqualTo(MyState.StateC)
+        val next = sm.dispatch(MyEvent.PressRental)
+        assert(next).isEqualTo(MyState.Lock)
     }
 }
