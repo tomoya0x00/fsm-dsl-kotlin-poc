@@ -1,9 +1,11 @@
+import kotlin.reflect.KClass
+
 interface BaseState
 interface BaseEvent
 
 class StateMachine(
         private var fsmContext: FsmContext,
-        private val transitionMap: Map<BaseState, Map<BaseEvent, Transition>>
+        private val transitionMap: Map<BaseState, List<Transition>>
 ) {
     fun dispatch(event: BaseEvent): BaseState {
         return fsmContext.dispatch(event, transitionMap)
@@ -16,14 +18,26 @@ class StateMachine(
         fun build(): StateMachine {
             println(this) // for debug
 
-            val transitionMap = mutableMapOf<BaseState, MutableMap<BaseEvent, Transition>>()
+            val transitionMap = mutableMapOf<BaseState, MutableList<Transition>>()
             root.allEdges.forEach { (bs, e) ->
-                if (!transitionMap.contains(bs)) transitionMap[bs] = mutableMapOf()
+                if (!transitionMap.contains(bs)) transitionMap[bs] = mutableListOf()
 
-                // TODO: detect duplicate event
-                // TODO: generate all action list
-                val actions: List<() -> Unit> = listOf(e.action)
-                transitionMap[bs]?.set(e.event, Transition(next = e.next, actions = actions))
+                val actions: MutableList<() -> Unit> = mutableListOf()
+
+                // TODO: add exit actions
+
+                // TODO: add entry actions
+
+                actions.add(e.action)
+
+                transitionMap[bs]?.add(Transition(
+                        event = e.event,
+                        guard = e.guard,
+                        next = e.next,
+                        actions = actions
+                ))
+
+                Unit
             }
 
             return StateMachine(fsmContext, transitionMap)
@@ -55,7 +69,12 @@ class StateMachine(
         }
     }
 
-    data class Transition(val next: BaseState, val actions: List<() -> Unit> = listOf())
+    data class Transition(
+            val event: KClass<*>,
+            val guard: ((BaseEvent) -> Boolean)? = null,
+            val next: BaseState,
+            val actions: List<() -> Unit> = listOf()
+    )
 }
 
 class State(
@@ -77,9 +96,14 @@ class State(
     }
 }
 
-class Edge(val event: BaseEvent, val next: BaseState, val action: () -> Unit) {
+class Edge(
+        val event: KClass<*>,
+        val guard: ((BaseEvent) -> Boolean)? = null,
+        val next: BaseState,
+        val action: () -> Unit
+) {
     override fun toString(): String {
-        return "--> ${next.javaClass.simpleName} : ${event.javaClass.simpleName}"
+        return "--> ${next.javaClass.simpleName} : ${event.simpleName}"
     }
 }
 
@@ -88,8 +112,12 @@ class FsmContext(initial: BaseState) {
     var state: BaseState = initial
         private set
 
-    fun dispatch(event: BaseEvent, transitionMap: Map<BaseState, Map<BaseEvent, StateMachine.Transition>>): BaseState {
-        val transition = transitionMap[state]?.let { it[event] }
+    fun dispatch(event: BaseEvent, transitionMap: Map<BaseState, List<StateMachine.Transition>>): BaseState {
+        val transition = transitionMap[state]?.let { transitions ->
+            transitions.filter { it.event == event::class }
+                    .firstOrNull { it.guard?.invoke(event) ?: true }
+        }
+
         transition?.run {
             actions.forEach { it() }
             state = next
@@ -125,12 +153,16 @@ fun State.state(
         entry = entry, exit = exit
 ).apply(init))
 
-fun State.edge(
-        event: BaseEvent,
+@Suppress("UNCHECKED_CAST")
+fun <T : BaseEvent> State.edge(
+        event: KClass<T>,
+        guard: ((T) -> Boolean)? = null,
         next: BaseState,
         action: () -> Unit = {}
 ) = this.edges.add(Edge(
         event = event,
+        guard = guard?.let { { event: BaseEvent -> it.invoke(event as T) } },
         next = next,
         action = action
 ))
+

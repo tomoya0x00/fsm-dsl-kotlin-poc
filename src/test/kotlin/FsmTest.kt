@@ -14,7 +14,7 @@ class FsmTest {
     sealed class MyEvent : BaseEvent {
         object PressRental : MyEvent()
         object PressReturn : MyEvent()
-        object PressLock : MyEvent()
+        data class PressLock(val withReturn: Boolean) : MyEvent()
         object PressUnLock : MyEvent()
     }
 
@@ -22,22 +22,26 @@ class FsmTest {
     fun test() {
         val sm = stateMachine(initial = MyState.NotLoaned) {
             state(MyState.NotLoaned) {
-                edge(MyEvent.PressRental, next = MyState.Lock)
+                edge(MyEvent.PressRental::class, next = MyState.Lock)
             }
             state(MyState.OnLoan,
                     entry = { println("turnOnRentalLed") },
                     exit = { println("turnOffRentalLed") }) {
                 state(MyState.Lock) {
-                    edge(MyEvent.PressReturn, next = MyState.NotLoaned)
-                    edge(MyEvent.PressUnLock, next = MyState.UnLock)
+                    edge(MyEvent.PressReturn::class, next = MyState.NotLoaned)
+                    edge(MyEvent.PressUnLock::class, next = MyState.UnLock)
                 }
                 state(MyState.UnLock) {
-                    edge(MyEvent.PressLock, next = MyState.Lock)
+                    edge(MyEvent.PressLock::class, guard = { !it.withReturn }, next = MyState.Lock)
+                    edge(MyEvent.PressLock::class, guard = { it.withReturn }, next = MyState.NotLoaned)
                 }
             }
         }
 
-        val next = sm.dispatch(MyEvent.PressRental)
-        assert(next).isEqualTo(MyState.Lock)
+        assert(sm.dispatch(MyEvent.PressRental)).isEqualTo(MyState.Lock)
+        assert(sm.dispatch(MyEvent.PressUnLock)).isEqualTo(MyState.UnLock)
+        assert(sm.dispatch(MyEvent.PressLock(withReturn = false))).isEqualTo(MyState.Lock)
+        assert(sm.dispatch(MyEvent.PressUnLock)).isEqualTo(MyState.UnLock)
+        assert(sm.dispatch(MyEvent.PressLock(withReturn = true))).isEqualTo(MyState.NotLoaned)
     }
 }
