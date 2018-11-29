@@ -4,6 +4,9 @@ import kotlin.reflect.KClass
 interface BaseState
 interface BaseEvent
 
+@DslMarker
+annotation class FsmDsl
+
 class StateMachine(
         private var fsmContext: FsmContext,
         private val transitionMap: Map<BaseState, List<Transition>>
@@ -12,9 +15,20 @@ class StateMachine(
         return fsmContext.dispatch(event, transitionMap)
     }
 
+    @FsmDsl
     class Builder(private val initial: BaseState) {
         private val fsmContext = FsmContext(initial)
-        val root = StateDetail(state = object : BaseState {})
+        private val root = StateDetail(state = object : BaseState {})
+
+        fun state(
+                state: BaseState,
+                entry: () -> Unit = {},
+                exit: () -> Unit = {},
+                init: StateDetail.() -> Unit = {}
+        ) = this.root.children.add(StateDetail(
+                parent = this.root, state = state,
+                entry = entry, exit = exit
+        ).apply(init))
 
         fun build(): StateMachine {
             println(this) // for debug
@@ -78,6 +92,7 @@ class StateMachine(
     )
 }
 
+@FsmDsl
 class StateDetail(
         val parent: StateDetail? = null,
         val state: BaseState,
@@ -89,6 +104,29 @@ class StateDetail(
 
     val allStateDetails: List<StateDetail>
         get() = children.map { it.allStateDetails }.flatten() + this
+
+    fun state(
+            state: BaseState,
+            entry: () -> Unit = {},
+            exit: () -> Unit = {},
+            init: StateDetail.() -> Unit = {}
+    ) = this.children.add(StateDetail(
+            parent = this, state = state,
+            entry = entry, exit = exit
+    ).apply(init))
+
+    @Suppress("UNCHECKED_CAST")
+    fun <T : BaseEvent> edge(
+            event: KClass<T>,
+            guard: ((T) -> Boolean)? = null,
+            next: BaseState,
+            action: () -> Unit = {}
+    ) = this.edges.add(Edge(
+            event = event,
+            guard = guard?.let { { event: BaseEvent -> it.invoke(event as T) } },
+            next = next,
+            action = action
+    ))
 
     override fun toString(): String {
         return "${state.javaClass.simpleName}\n" +
@@ -133,37 +171,3 @@ fun stateMachine(
         init: StateMachine.Builder.() -> Unit
 ): StateMachine = StateMachine.Builder(initial = initial)
         .apply(init).build()
-
-fun StateMachine.Builder.state(
-        state: BaseState,
-        entry: () -> Unit = {},
-        exit: () -> Unit = {},
-        init: StateDetail.() -> Unit = {}
-) = this.root.children.add(StateDetail(
-        parent = this.root, state = state,
-        entry = entry, exit = exit
-).apply(init))
-
-fun StateDetail.state(
-        state: BaseState,
-        entry: () -> Unit = {},
-        exit: () -> Unit = {},
-        init: StateDetail.() -> Unit = {}
-) = this.children.add(StateDetail(
-        parent = this, state = state,
-        entry = entry, exit = exit
-).apply(init))
-
-@Suppress("UNCHECKED_CAST")
-fun <T : BaseEvent> StateDetail.edge(
-        event: KClass<T>,
-        guard: ((T) -> Boolean)? = null,
-        next: BaseState,
-        action: () -> Unit = {}
-) = this.edges.add(Edge(
-        event = event,
-        guard = guard?.let { { event: BaseEvent -> it.invoke(event as T) } },
-        next = next,
-        action = action
-))
-
