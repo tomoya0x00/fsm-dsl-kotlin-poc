@@ -45,7 +45,9 @@ class FsmTest {
                         exit = { history.add("out_UnLock") }
                 ) {
                     edge(MyEvent.PressLock::class, guard = { !it.withReturn }, next = MyState.Lock)
-                    edge(MyEvent.PressLock::class, guard = { it.withReturn }, next = MyState.NotLoaned)
+                    edge(MyEvent.PressLock::class, guard = { it.withReturn }, next = MyState.NotLoaned) {
+                        history.add("action_PressLockWithReturn")
+                    }
                 }
             }
         }
@@ -86,6 +88,7 @@ class FsmTest {
         history.clear()
         assert(sm.dispatch(MyEvent.PressLock(withReturn = true))).isEqualTo(MyState.NotLoaned)
         assert(history).isEqualTo(listOf(
+                "action_PressLockWithReturn",
                 "out_UnLock",
                 "out_OnLoan",
                 "in_NotLoaned"
