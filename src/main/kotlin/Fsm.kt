@@ -1,3 +1,4 @@
+
 import kotlin.reflect.KClass
 
 interface BaseState
@@ -18,32 +19,34 @@ class StateMachine(
         fun build(): StateMachine {
             println(this) // for debug
 
-            val stateMap = mutableMapOf<BaseState, StateDetail>()
+            val allStateDetails = root.allStateDetails
 
-            root.allStateDetails.forEach { stateDetail ->
-                // Generate All BaseState -> StateDetails map
-                stateMap[stateDetail.state] = stateDetail
+            val stateToRootMap = mutableMapOf<BaseState, List<StateDetail>>()
+            allStateDetails.forEach { stateDetail ->
+                if (stateToRootMap.containsKey(stateDetail.state)) {
+                    throw Exception("duplicate state(${stateDetail.state::class.java.simpleName}) found!")
+                }
+
+                stateToRootMap[stateDetail.state] = generateSequence(stateDetail) { it.parent }.toList()
             }
 
             val transitionMap = mutableMapOf<BaseState, MutableList<Transition>>()
-
-            root.allStateDetails.forEach { stateDetail ->
-                // TODO: check duplicate state
+            allStateDetails.forEach { stateDetail ->
                 transitionMap[stateDetail.state] = mutableListOf()
 
-                // TODO: cache
-                val stateToRoot = generateSequence(stateDetail) { it.parent }.toList()
+                val stateToRoot = stateToRootMap[stateDetail.state] ?: emptyList()
 
                 stateDetail.edges.forEach { edge ->
-                    // TODO: cache
-                    val rootToNext = stateMap[edge.next]?.let { stateDetail ->
-                        generateSequence(stateDetail) { it.parent }.toList().reversed()
-                    } ?: emptyList()
+                    val rootToNext = stateToRootMap[edge.next]?.reversed() ?: emptyList()
+
                     val ignoreStatesCount = stateToRoot.intersect(rootToNext).size
 
-                    val exitActions = stateToRoot.dropLast(ignoreStatesCount).map { it.exit }.toTypedArray()
-                    val entryActions = rootToNext.drop(ignoreStatesCount).map { it.entry }.toTypedArray()
-                    val actions = listOf(edge.action, *exitActions, *entryActions)
+                    val exitActions = stateToRoot.dropLast(ignoreStatesCount).map { it.exit }
+                    val entryActions = rootToNext.drop(ignoreStatesCount).map { it.entry }
+                    val actions = mutableListOf(edge.action).apply {
+                        addAll(exitActions)
+                        addAll(entryActions)
+                    }
 
                     transitionMap[stateDetail.state]?.add(Transition(
                             event = edge.event,
@@ -55,9 +58,7 @@ class StateMachine(
             }
 
             // execute entry actions of initial state
-            val rootToInitial = stateMap[initial]?.let { stateDetail ->
-                generateSequence(stateDetail) { it.parent }.toList().reversed().drop(1)
-            } ?: emptyList()
+            val rootToInitial = stateToRootMap[initial]?.reversed()?.drop(1) ?: emptyList()
             rootToInitial.forEach { it.entry.invoke() }
 
             return StateMachine(fsmContext, transitionMap)
@@ -164,7 +165,7 @@ fun <T : BaseEvent> StateDetail.edge(
         action: () -> Unit = {}
 ) = this.edges.add(Edge(
         event = event,
-        guard = guard?.let { { event: BaseEvent -> it.invoke(event as T) } }, // TODO: more safety
+        guard = guard?.let { { event: BaseEvent -> it.invoke(event as T) } },
         next = next,
         action = action
 ))
