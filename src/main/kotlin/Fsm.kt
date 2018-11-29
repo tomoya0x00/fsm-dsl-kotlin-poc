@@ -1,4 +1,3 @@
-
 import kotlin.reflect.KClass
 
 interface BaseState
@@ -11,6 +10,9 @@ class StateMachine(
         private var fsmContext: FsmContext,
         private val transitionMap: Map<BaseState, List<Transition>>
 ) {
+    val currentState: BaseState
+        get() = fsmContext.state
+
     fun dispatch(event: BaseEvent): BaseState {
         return fsmContext.dispatch(event, transitionMap)
     }
