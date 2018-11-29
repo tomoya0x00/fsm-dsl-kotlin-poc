@@ -11,7 +11,7 @@ class StateMachine(
         return fsmContext.dispatch(event, transitionMap)
     }
 
-    class Builder(initial: BaseState) {
+    class Builder(private val initial: BaseState) {
         private val fsmContext = FsmContext(initial)
         val root = StateDetail(state = object : BaseState {}) // TODO: private
 
@@ -28,6 +28,7 @@ class StateMachine(
             val transitionMap = mutableMapOf<BaseState, MutableList<Transition>>()
 
             root.allStateDetails.forEach { stateDetail ->
+                // TODO: check duplicate state
                 transitionMap[stateDetail.state] = mutableListOf()
 
                 // TODO: cache
@@ -52,6 +53,12 @@ class StateMachine(
                     ))
                 }
             }
+
+            // execute entry actions of initial state
+            val rootToInitial = stateMap[initial]?.let { stateDetail ->
+                generateSequence(stateDetail) { it.parent }.toList().reversed().drop(1)
+            } ?: emptyList()
+            rootToInitial.forEach { it.entry }
 
             return StateMachine(fsmContext, transitionMap)
         }
@@ -157,7 +164,7 @@ fun <T : BaseEvent> StateDetail.edge(
         action: () -> Unit = {}
 ) = this.edges.add(Edge(
         event = event,
-        guard = guard?.let { { event: BaseEvent -> it.invoke(event as T) } },
+        guard = guard?.let { { event: BaseEvent -> it.invoke(event as T) } }, // TODO: more safety
         next = next,
         action = action
 ))
