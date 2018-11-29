@@ -14,7 +14,7 @@ class StateMachine(
 
     class Builder(private val initial: BaseState) {
         private val fsmContext = FsmContext(initial)
-        val root = StateDetail(state = object : BaseState {}) // TODO: private
+        val root = StateDetail(state = object : BaseState {})
 
         fun build(): StateMachine {
             println(this) // for debug
@@ -89,9 +89,6 @@ class StateDetail(
 
     val allStateDetails: List<StateDetail>
         get() = children.map { it.allStateDetails }.flatten() + this
-
-    val allEdges: List<Pair<BaseState, Edge>>
-        get() = children.map { it.allEdges }.flatten() + edges.map { Pair(this.state, it) }
 
     override fun toString(): String {
         return "${state.javaClass.simpleName}\n" +
