@@ -13,54 +13,47 @@ class StateMachine(
 
     class Builder(initial: BaseState) {
         private val fsmContext = FsmContext(initial)
-        val root = State(state = object : BaseState {})
+        val root = StateDetail(state = object : BaseState {}) // TODO: private
 
         fun build(): StateMachine {
             println(this) // for debug
 
-            val transitionMap = mutableMapOf<BaseState, MutableList<Transition>>()
-            root.allEdges.forEach { (bs, e) ->
-                if (!transitionMap.contains(bs)) transitionMap[bs] = mutableListOf()
+            val stateMap = mutableMapOf<BaseState, StateDetail>()
 
-                val actions: MutableList<() -> Unit> = mutableListOf()
-
-                // TODO: add exit actions
-
-                // TODO: add entry actions
-
-                actions.add(e.action)
-
-                transitionMap[bs]?.add(Transition(
-                        event = e.event,
-                        guard = e.guard,
-                        next = e.next,
-                        actions = actions
-                ))
-
-                Unit
+            root.allStateDetails.forEach { stateDetail ->
+                // Generate All BaseState -> StateDetails map
+                stateMap[stateDetail.state] = stateDetail
             }
 
-            return StateMachine(fsmContext, transitionMap)
-        }
+            val transitionMap = mutableMapOf<BaseState, MutableList<Transition>>()
 
-        private fun breadthFirstSearch(state: BaseState, root: State): Boolean {
-            val markedStates = mutableListOf<BaseState>()
-            val queue = mutableListOf<State>()
+            root.allStateDetails.forEach { stateDetail ->
+                transitionMap[stateDetail.state] = mutableListOf()
 
-            markedStates += root.state
-            queue += root
-            while (!queue.isEmpty()) {
-                val v = queue.removeAt(0)
-                if (v.state == state) return true
-                v.children.forEach { chState ->
-                    if (markedStates.none { it == chState.state }) {
-                        markedStates += chState.state
-                        queue += chState
-                    }
+                // TODO: cache
+                val stateToRoot = generateSequence(stateDetail) { it.parent }.toList()
+
+                stateDetail.edges.forEach { edge ->
+                    // TODO: cache
+                    val rootToNext = stateMap[edge.next]?.let { stateDetail ->
+                        generateSequence(stateDetail) { it.parent }.toList().reversed()
+                    } ?: emptyList()
+                    val ignoreStatesCount = stateToRoot.intersect(rootToNext).size
+
+                    val exitActions = stateToRoot.dropLast(ignoreStatesCount).map { it.exit }.toTypedArray()
+                    val entryActions = rootToNext.drop(ignoreStatesCount).map { it.entry }.toTypedArray()
+                    val actions = listOf(edge.action, *exitActions, *entryActions)
+
+                    transitionMap[stateDetail.state]?.add(Transition(
+                            event = edge.event,
+                            guard = edge.guard,
+                            next = edge.next,
+                            actions = actions
+                    ))
                 }
             }
 
-            return false
+            return StateMachine(fsmContext, transitionMap)
         }
 
         override fun toString(): String {
@@ -77,17 +70,20 @@ class StateMachine(
     )
 }
 
-class State(
-        val parent: State? = null,
+class StateDetail(
+        val parent: StateDetail? = null,
         val state: BaseState,
         val entry: () -> Unit = {},
         val exit: () -> Unit = {}
 ) {
-    val children: MutableList<State> = mutableListOf()
+    val children: MutableList<StateDetail> = mutableListOf()
     val edges: MutableList<Edge> = mutableListOf()
 
+    val allStateDetails: List<StateDetail>
+        get() = children.map { it.allStateDetails }.flatten() + this
+
     val allEdges: List<Pair<BaseState, Edge>>
-        get() = children.map { it.allEdges }.flatMap { it } + edges.map { Pair(this.state, it) }
+        get() = children.map { it.allEdges }.flatten() + edges.map { Pair(this.state, it) }
 
     override fun toString(): String {
         return "${state.javaClass.simpleName}\n" +
@@ -137,24 +133,24 @@ fun StateMachine.Builder.state(
         state: BaseState,
         entry: () -> Unit = {},
         exit: () -> Unit = {},
-        init: State.() -> Unit = {}
-) = this.root.children.add(State(
+        init: StateDetail.() -> Unit = {}
+) = this.root.children.add(StateDetail(
         parent = this.root, state = state,
         entry = entry, exit = exit
 ).apply(init))
 
-fun State.state(
+fun StateDetail.state(
         state: BaseState,
         entry: () -> Unit = {},
         exit: () -> Unit = {},
-        init: State.() -> Unit = {}
-) = this.children.add(State(
+        init: StateDetail.() -> Unit = {}
+) = this.children.add(StateDetail(
         parent = this, state = state,
         entry = entry, exit = exit
 ).apply(init))
 
 @Suppress("UNCHECKED_CAST")
-fun <T : BaseEvent> State.edge(
+fun <T : BaseEvent> StateDetail.edge(
         event: KClass<T>,
         guard: ((T) -> Boolean)? = null,
         next: BaseState,

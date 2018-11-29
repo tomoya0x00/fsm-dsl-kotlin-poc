@@ -21,17 +21,27 @@ class FsmTest {
     @Test
     fun test() {
         val sm = stateMachine(initial = MyState.NotLoaned) {
-            state(MyState.NotLoaned) {
+            state(MyState.NotLoaned,
+                    entry = { println("entry NotLoaned") },
+                    exit = { println("exit NotLoaned") }
+            ) {
                 edge(MyEvent.PressRental::class, next = MyState.Lock)
             }
             state(MyState.OnLoan,
-                    entry = { println("turnOnRentalLed") },
-                    exit = { println("turnOffRentalLed") }) {
-                state(MyState.Lock) {
+                    entry = { println("entry OnLoan") },
+                    exit = { println("exit OnLoan") }
+            ) {
+                state(MyState.Lock,
+                        entry = { println("entry Lock") },
+                        exit = { println("exit Lock") }
+                ) {
                     edge(MyEvent.PressReturn::class, next = MyState.NotLoaned)
                     edge(MyEvent.PressUnLock::class, next = MyState.UnLock)
                 }
-                state(MyState.UnLock) {
+                state(MyState.UnLock,
+                        entry = { println("entry UnLock") },
+                        exit = { println("exit UnLock") }
+                ) {
                     edge(MyEvent.PressLock::class, guard = { !it.withReturn }, next = MyState.Lock)
                     edge(MyEvent.PressLock::class, guard = { it.withReturn }, next = MyState.NotLoaned)
                 }
