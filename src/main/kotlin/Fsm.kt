@@ -58,7 +58,7 @@ class StateMachine(
             val rootToInitial = stateMap[initial]?.let { stateDetail ->
                 generateSequence(stateDetail) { it.parent }.toList().reversed().drop(1)
             } ?: emptyList()
-            rootToInitial.forEach { it.entry }
+            rootToInitial.forEach { it.entry.invoke() }
 
             return StateMachine(fsmContext, transitionMap)
         }
@@ -122,7 +122,7 @@ class FsmContext(initial: BaseState) {
         }
 
         transition?.run {
-            actions.forEach { it() }
+            actions.forEach { it.invoke() }
             state = next
         }
 
