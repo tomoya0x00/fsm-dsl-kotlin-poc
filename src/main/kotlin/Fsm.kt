@@ -40,7 +40,7 @@ class StateMachine<T : BaseState>(
             val stateToRootMap = mutableMapOf<BaseState, List<StateDetail<T>>>()
             allStateDetails.forEach { stateDetail ->
                 if (stateToRootMap.containsKey(stateDetail.state)) {
-                    throw Exception("duplicate state(${stateDetail.state::class.java.simpleName}) found!")
+                    throw Exception("duplicate state(${stateDetail.state::class.simpleName}) found!")
                 }
 
                 stateToRootMap[stateDetail.state] = generateSequence(stateDetail) { it.parent }.toList()
@@ -144,12 +144,12 @@ class Edge<T : BaseState>(
         val action: () -> Unit
 ) {
     override fun toString(): String {
-        return "--> ${next.enumNameOrClassName()} : ${event.java.simpleName}"
+        return "--> ${next.enumNameOrClassName()} : ${event.simpleName}"
     }
 }
 
 private fun Any.enumNameOrClassName(): String =
-        if (this.javaClass.isEnum) (this as Enum<*>).name else this::javaClass.name
+        if (this is Enum<*>) this.name else this::class.simpleName ?: ""
 
 class FsmContext<T : BaseState>(initial: T) {
 
