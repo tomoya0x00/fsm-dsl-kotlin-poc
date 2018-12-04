@@ -121,8 +121,9 @@ class StateDetail<T : BaseState>(
             exit = exit
     ).apply(init))
 
+    @Suppress("UNCHECKED_CAST")
     inline fun <reified R : BaseEvent> edge(
-            next: T,
+            next: T = this.state as T,
             noinline guard: ((R) -> Boolean)? = null,
             noinline action: () -> Unit = {}
     ) = this.edges.add(Edge(
@@ -139,7 +140,7 @@ class StateDetail<T : BaseState>(
     }
 }
 
-class Edge<T: BaseState>(
+class Edge<T : BaseState>(
         val eventName: EventName,
         val next: T,
         val guard: ((BaseEvent) -> Boolean)? = null,
