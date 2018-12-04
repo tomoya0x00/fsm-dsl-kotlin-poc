@@ -27,7 +27,7 @@ class FsmTest {
                     entry = { history.add("in_NotLoaned") },
                     exit = { history.add("out_NotLoaned") }
             ) {
-                edge(MyEvent.PressRental::class, next = MyState.LOCK)
+                edge<MyEvent.PressRental>(MyState.LOCK)
             }
             state(MyState.ON_LOAN,
                     entry = { history.add("in_OnLoan") },
@@ -37,19 +37,20 @@ class FsmTest {
                         entry = { history.add("in_Lock") },
                         exit = { history.add("out_Lock") }
                 ) {
-                    edge(MyEvent.PressReturn::class, next = MyState.NOT_LOANED)
-                    edge(MyEvent.PressUnLock::class, next = MyState.UNLOCK)
+                    edge<MyEvent.PressReturn>(MyState.NOT_LOANED)
+                    edge<MyEvent.PressUnLock>(MyState.UNLOCK)
                 }
                 state(MyState.UNLOCK,
                         entry = { history.add("in_UnLock") },
                         exit = { history.add("out_UnLock") }
                 ) {
-                    edge(MyEvent.PressLock::class, guard = { !it.withReturn }, next = MyState.LOCK)
-                    edge(MyEvent.PressLock::class, guard = { it.withReturn }, next = MyState.NOT_LOANED) {
+                    edge<MyEvent.PressLock>(MyState.LOCK, guard = { !it.withReturn })
+                    edge<MyEvent.PressLock>(MyState.NOT_LOANED, guard = { it.withReturn }) {
                         history.add("action_PressLockWithReturn")
                     }
                 }
             }
+            Unit
         }
 
         assert(history).isEqualTo(listOf(

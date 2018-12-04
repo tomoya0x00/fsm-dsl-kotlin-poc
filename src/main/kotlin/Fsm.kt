@@ -1,7 +1,7 @@
-import kotlin.reflect.KClass
-
 interface BaseState
 interface BaseEvent
+
+typealias EventName = String
 
 @DslMarker
 annotation class FsmDsl
@@ -28,8 +28,10 @@ class StateMachine<T : BaseState>(
                 exit: () -> Unit = {},
                 init: StateDetail<T>.() -> Unit = {}
         ) = this.root.children.add(StateDetail(
-                parent = this.root, state = state,
-                entry = entry, exit = exit
+                parent = this.root,
+                state = state,
+                entry = entry,
+                exit = exit
         ).apply(init))
 
         fun build(): StateMachine<T> {
@@ -40,7 +42,7 @@ class StateMachine<T : BaseState>(
             val stateToRootMap = mutableMapOf<BaseState, List<StateDetail<T>>>()
             allStateDetails.forEach { stateDetail ->
                 if (stateToRootMap.containsKey(stateDetail.state)) {
-                    throw Exception("duplicate state(${stateDetail.state::class.simpleName}) found!")
+                    throw Exception("duplicate state(${stateDetail.state.enumNameOrClassName()}) found!")
                 }
 
                 stateToRootMap[stateDetail.state] = generateSequence(stateDetail) { it.parent }.toList()
@@ -52,7 +54,7 @@ class StateMachine<T : BaseState>(
 
                 val stateToRoot = stateToRootMap[stateDetail.state] ?: emptyList()
 
-                stateDetail.edges.forEach { edge: Edge<T> ->
+                stateDetail.edges.forEach { edge ->
                     val rootToNext = stateToRootMap[edge.next]?.reversed() ?: emptyList()
 
                     val ignoreStatesCount = stateToRoot.intersect(rootToNext).size
@@ -65,7 +67,7 @@ class StateMachine<T : BaseState>(
                     }
 
                     transitionMap[stateDetail.state]?.add(Transition(
-                            event = edge.event,
+                            event = edge.eventName,
                             guard = edge.guard,
                             next = edge.next,
                             actions = actions
@@ -87,7 +89,7 @@ class StateMachine<T : BaseState>(
     }
 
     data class Transition<T : BaseState>(
-            val event: KClass<*>,
+            val event: EventName,
             val guard: ((BaseEvent) -> Boolean)? = null,
             val next: T,
             val actions: List<() -> Unit> = listOf()
@@ -113,18 +115,18 @@ class StateDetail<T : BaseState>(
             exit: () -> Unit = {},
             init: StateDetail<T>.() -> Unit = {}
     ) = this.children.add(StateDetail(
-            parent = this, state = state,
-            entry = entry, exit = exit
+            parent = this,
+            state = state,
+            entry = entry,
+            exit = exit
     ).apply(init))
 
-    @Suppress("UNCHECKED_CAST")
-    fun <R : BaseEvent> edge(
-            event: KClass<R>,
-            guard: ((R) -> Boolean)? = null,
+    inline fun <reified R : BaseEvent> edge(
             next: T,
-            action: () -> Unit = {}
+            noinline guard: ((R) -> Boolean)? = null,
+            noinline action: () -> Unit = {}
     ) = this.edges.add(Edge(
-            event = event,
+            eventName = R::class.simpleName ?: "",
             guard = guard?.let { { event: BaseEvent -> it.invoke(event as R) } },
             next = next,
             action = action
@@ -137,14 +139,14 @@ class StateDetail<T : BaseState>(
     }
 }
 
-class Edge<T : BaseState>(
-        val event: KClass<*>,
-        val guard: ((BaseEvent) -> Boolean)? = null,
+class Edge<T: BaseState>(
+        val eventName: EventName,
         val next: T,
+        val guard: ((BaseEvent) -> Boolean)? = null,
         val action: () -> Unit
 ) {
     override fun toString(): String {
-        return "--> ${next.enumNameOrClassName()} : ${event.simpleName}"
+        return "--> ${next.enumNameOrClassName()} : $eventName"
     }
 }
 
@@ -158,7 +160,7 @@ class FsmContext<T : BaseState>(initial: T) {
 
     fun dispatch(event: BaseEvent, transitionMap: Map<BaseState, List<StateMachine.Transition<T>>>): T {
         val transition = transitionMap[state]?.let { transitions ->
-            transitions.filter { it.event == event::class }
+            transitions.filter { it.event == event::class.simpleName }
                     .firstOrNull { it.guard?.invoke(event) ?: true }
         }
 
