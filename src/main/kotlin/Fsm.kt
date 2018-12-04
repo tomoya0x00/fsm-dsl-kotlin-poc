@@ -8,7 +8,7 @@ annotation class FsmDsl
 
 class StateMachine<T>(
         private var fsmContext: FsmContext<T>,
-        private val transitionMap: Map<BaseState, List<Transition<T>>>
+        private val transitionMap: Map<T, List<Transition<T>>>
 ) where T : Enum<T>, T : BaseState {
     val currentState: T
         get() = fsmContext.state
@@ -21,26 +21,29 @@ class StateMachine<T>(
     class Builder<T>(private val initial: T)
             where T : Enum<T>, T : BaseState {
         private val fsmContext = FsmContext(initial)
-        private val root = StateDetail<T>(state = object : BaseState {})
+        private val rootChildren: MutableList<StateDetail<T>> = mutableListOf()
+
+        private val allStateDetails: List<StateDetail<T>>
+            get() = rootChildren.map { it.allStateDetails }.flatten()
 
         fun state(
                 state: T,
-                entry: () -> Unit = {},
-                exit: () -> Unit = {},
+                entry: T.() -> Unit = {},
+                exit: T.() -> Unit = {},
                 init: StateDetail<T>.() -> Unit = {}
-        ) = this.root.children.add(StateDetail(
-                parent = this.root,
+        ) = this.rootChildren.add(StateDetail(
+                parent = null,
                 state = state,
-                entry = entry,
-                exit = exit
+                entry = { entry.invoke(state) },
+                exit = { exit.invoke(state) }
         ).apply(init))
 
         fun build(): StateMachine<T> {
             println(this) // for debug
 
-            val allStateDetails = root.allStateDetails
+            val allStateDetails = allStateDetails
 
-            val stateToRootMap = mutableMapOf<BaseState, List<StateDetail<T>>>()
+            val stateToRootMap = mutableMapOf<T, List<StateDetail<T>>>()
             allStateDetails.forEach { stateDetail ->
                 if (stateToRootMap.containsKey(stateDetail.state)) {
                     throw Exception("duplicate state(${stateDetail.state.enumNameOrClassName()}) found!")
@@ -49,7 +52,7 @@ class StateMachine<T>(
                 stateToRootMap[stateDetail.state] = generateSequence(stateDetail) { it.parent }.toList()
             }
 
-            val transitionMap = mutableMapOf<BaseState, MutableList<Transition<T>>>()
+            val transitionMap = mutableMapOf<T, MutableList<Transition<T>>>()
             allStateDetails.forEach { stateDetail ->
                 transitionMap[stateDetail.state] = mutableListOf()
 
@@ -77,7 +80,7 @@ class StateMachine<T>(
             }
 
             // execute entry actions of initial state
-            val rootToInitial = stateToRootMap[initial]?.reversed()?.drop(1) ?: emptyList()
+            val rootToInitial = stateToRootMap[initial]?.reversed() ?: emptyList()
             rootToInitial.forEach { it.entry.invoke() }
 
             return StateMachine(fsmContext, transitionMap)
@@ -85,7 +88,7 @@ class StateMachine<T>(
 
         override fun toString(): String {
             return "StateMachine\n" +
-                    root.children.joinToString("\n") { it.toString() }.prependIndent("  ")
+                    rootChildren.joinToString("\n") { it.toString() }.prependIndent("  ")
         }
     }
 
@@ -99,12 +102,12 @@ class StateMachine<T>(
 
 @FsmDsl
 class StateDetail<T>(
-        val parent: StateDetail<T>? = null,
-        val state: BaseState,
+        val parent: StateDetail<T>?,
+        val state: T,
         val entry: () -> Unit = {},
         val exit: () -> Unit = {}
 ) where T : Enum<T>, T : BaseState {
-    val children: MutableList<StateDetail<T>> = mutableListOf()
+    private val children: MutableList<StateDetail<T>> = mutableListOf()
     val edges: MutableList<Edge<T>> = mutableListOf()
 
     val allStateDetails: List<StateDetail<T>>
@@ -112,19 +115,18 @@ class StateDetail<T>(
 
     fun state(
             state: T,
-            entry: () -> Unit = {},
-            exit: () -> Unit = {},
+            entry: T.() -> Unit = {},
+            exit: T.() -> Unit = {},
             init: StateDetail<T>.() -> Unit = {}
     ) = this.children.add(StateDetail(
             parent = this,
             state = state,
-            entry = entry,
-            exit = exit
+            entry = { entry.invoke(state) },
+            exit = { exit.invoke(state) }
     ).apply(init))
 
-    @Suppress("UNCHECKED_CAST")
     inline fun <reified R : BaseEvent> edge(
-            next: T = this.state as T,
+            next: T = this.state,
             noinline guard: ((R) -> Boolean)? = null,
             noinline action: () -> Unit = {}
     ) = this.edges.add(Edge(
@@ -161,7 +163,7 @@ class FsmContext<T>(initial: T)
     var state: T = initial
         private set
 
-    fun dispatch(event: BaseEvent, transitionMap: Map<BaseState, List<StateMachine.Transition<T>>>): T {
+    fun dispatch(event: BaseEvent, transitionMap: Map<T, List<StateMachine.Transition<T>>>): T {
         val transition = transitionMap[state]?.let { transitions ->
             transitions.filter { it.event == event::class.simpleName }
                     .firstOrNull { it.guard?.invoke(event) ?: true }
