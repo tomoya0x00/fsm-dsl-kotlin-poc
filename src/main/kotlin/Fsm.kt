@@ -6,10 +6,10 @@ typealias EventName = String
 @DslMarker
 annotation class FsmDsl
 
-class StateMachine<T : BaseState>(
+class StateMachine<T>(
         private var fsmContext: FsmContext<T>,
         private val transitionMap: Map<BaseState, List<Transition<T>>>
-) {
+) where T : Enum<T>, T : BaseState {
     val currentState: T
         get() = fsmContext.state
 
@@ -18,7 +18,8 @@ class StateMachine<T : BaseState>(
     }
 
     @FsmDsl
-    class Builder<T : BaseState>(private val initial: T) {
+    class Builder<T>(private val initial: T)
+            where T : Enum<T>, T : BaseState {
         private val fsmContext = FsmContext(initial)
         private val root = StateDetail<T>(state = object : BaseState {})
 
@@ -88,21 +89,21 @@ class StateMachine<T : BaseState>(
         }
     }
 
-    data class Transition<T : BaseState>(
+    data class Transition<T>(
             val event: EventName,
             val guard: ((BaseEvent) -> Boolean)? = null,
             val next: T,
             val actions: List<() -> Unit> = listOf()
-    )
+    ) where T : Enum<T>, T : BaseState
 }
 
 @FsmDsl
-class StateDetail<T : BaseState>(
+class StateDetail<T>(
         val parent: StateDetail<T>? = null,
         val state: BaseState,
         val entry: () -> Unit = {},
         val exit: () -> Unit = {}
-) {
+) where T : Enum<T>, T : BaseState {
     val children: MutableList<StateDetail<T>> = mutableListOf()
     val edges: MutableList<Edge<T>> = mutableListOf()
 
@@ -140,21 +141,22 @@ class StateDetail<T : BaseState>(
     }
 }
 
-class Edge<T : BaseState>(
+class Edge<T>(
         val eventName: EventName,
         val next: T,
         val guard: ((BaseEvent) -> Boolean)? = null,
         val action: () -> Unit
-) {
+) where T : Enum<T>, T : BaseState {
     override fun toString(): String {
-        return "--> ${next.enumNameOrClassName()} : $eventName"
+        return "--> ${next.name} : $eventName"
     }
 }
 
 private fun Any.enumNameOrClassName(): String =
         if (this is Enum<*>) this.name else this::class.simpleName ?: ""
 
-class FsmContext<T : BaseState>(initial: T) {
+class FsmContext<T>(initial: T)
+        where T : Enum<T>, T : BaseState {
 
     var state: T = initial
         private set
@@ -174,8 +176,8 @@ class FsmContext<T : BaseState>(initial: T) {
     }
 }
 
-fun <T : BaseState> stateMachine(
+fun <T> stateMachine(
         initial: T,
         init: StateMachine.Builder<T>.() -> Unit
-): StateMachine<T> = StateMachine.Builder(initial = initial)
-        .apply(init).build()
+): StateMachine<T> where T : Enum<T>, T : BaseState =
+        StateMachine.Builder(initial = initial).apply(init).build()
