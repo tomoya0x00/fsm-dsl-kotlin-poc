@@ -1,7 +1,10 @@
 interface BaseState
 interface BaseEvent
 
-typealias EventName = String
+private typealias EventName = String
+private typealias Action = () -> Unit
+private typealias Entry<T> = T.() -> Unit
+private typealias Exit<T> = T.() -> Unit
 
 @DslMarker
 annotation class FsmDsl
@@ -28,8 +31,8 @@ class StateMachine<T>(
 
         fun state(
                 state: T,
-                entry: T.() -> Unit = {},
-                exit: T.() -> Unit = {},
+                entry: Entry<T> = {},
+                exit: Exit<T> = {},
                 init: StateDetail<T>.() -> Unit = {}
         ) = this.rootChildren.add(StateDetail(
                 parent = null,
@@ -96,7 +99,7 @@ class StateMachine<T>(
             val event: EventName,
             val guard: ((BaseEvent) -> Boolean)? = null,
             val next: T,
-            val actions: List<() -> Unit> = listOf()
+            val actions: List<Action> = listOf()
     ) where T : Enum<T>, T : BaseState
 }
 
@@ -104,8 +107,8 @@ class StateMachine<T>(
 class StateDetail<T>(
         val parent: StateDetail<T>?,
         val state: T,
-        val entry: () -> Unit = {},
-        val exit: () -> Unit = {}
+        val entry: Action = {},
+        val exit: Action = {}
 ) where T : Enum<T>, T : BaseState {
     private val children: MutableList<StateDetail<T>> = mutableListOf()
     val edges: MutableList<Edge<T>> = mutableListOf()
@@ -115,8 +118,8 @@ class StateDetail<T>(
 
     fun state(
             state: T,
-            entry: T.() -> Unit = {},
-            exit: T.() -> Unit = {},
+            entry: Entry<T> = {},
+            exit: Exit<T> = {},
             init: StateDetail<T>.() -> Unit = {}
     ) = this.children.add(StateDetail(
             parent = this,
@@ -128,7 +131,7 @@ class StateDetail<T>(
     inline fun <reified R : BaseEvent> edge(
             next: T = this.state,
             noinline guard: ((R) -> Boolean)? = null,
-            noinline action: () -> Unit = {}
+            noinline action: Action = {}
     ) = this.edges.add(Edge(
             eventName = R::class.simpleName ?: "",
             guard = guard?.let { { event: BaseEvent -> it.invoke(event as R) } },
@@ -147,7 +150,7 @@ class Edge<T>(
         val eventName: EventName,
         val next: T,
         val guard: ((BaseEvent) -> Boolean)? = null,
-        val action: () -> Unit
+        val action: Action
 ) where T : Enum<T>, T : BaseState {
     override fun toString(): String {
         return "--> ${next.name} : $eventName"
