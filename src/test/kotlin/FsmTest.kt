@@ -1,5 +1,7 @@
 import assertk.assert
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isTrue
 import org.junit.Test
 
 class FsmTest {
@@ -67,6 +69,9 @@ class FsmTest {
                 "in_OnLoan",
                 "in_Lock"
         ))
+        assert(sm.isStateOfChildOf(MyState.ON_LOAN)).isTrue()
+        assert(sm.isStateOfChildOf(MyState.NOT_LOANED)).isFalse()
+        assert(sm.isStateOfChildOf(MyState.LOCK)).isFalse()
 
         history.clear()
         assert(sm.dispatch(MyEvent.PressLock(withReturn = false))).isEqualTo(MyState.LOCK)
@@ -80,6 +85,9 @@ class FsmTest {
                 "out_Lock",
                 "in_UnLock"
         ))
+        assert(sm.isStateOfChildOf(MyState.ON_LOAN)).isTrue()
+        assert(sm.isStateOfChildOf(MyState.NOT_LOANED)).isFalse()
+        assert(sm.isStateOfChildOf(MyState.UNLOCK)).isFalse()
 
         history.clear()
         assert(sm.dispatch(MyEvent.PressLock(withReturn = false))).isEqualTo(MyState.LOCK)
@@ -103,5 +111,8 @@ class FsmTest {
                 "out_OnLoan",
                 "in_NotLoaned"
         ))
+
+        assert(sm.isStateOfChildOf(MyState.NOT_LOANED)).isFalse()
+        assert(sm.isStateOfChildOf(MyState.UNLOCK)).isFalse()
     }
 }

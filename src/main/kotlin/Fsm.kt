@@ -11,10 +11,17 @@ annotation class FsmDsl
 
 class StateMachine<T>(
         private var fsmContext: FsmContext<T>,
-        private val transitionMap: Map<T, List<Transition<T>>>
+        private val transitionMap: Map<T, List<Transition<T>>>,
+        private val stateToRootMap: Map<T, List<StateDetail<T>>>
+
 ) where T : Enum<T>, T : BaseState {
-    val currentState: T
+    val state: T
         get() = fsmContext.state
+
+    fun isStateOfChildOf(state: T): Boolean =
+            stateToRootMap[this.state]?.let { stateToRoot ->
+                stateToRoot.drop(1).any { it.state == state }
+            } ?: false
 
     fun dispatch(event: BaseEvent): T {
         return fsmContext.dispatch(event, transitionMap)
@@ -86,7 +93,7 @@ class StateMachine<T>(
             val rootToInitial = stateToRootMap[initial]?.reversed() ?: emptyList()
             rootToInitial.forEach { it.entry.invoke() }
 
-            return StateMachine(fsmContext, transitionMap)
+            return StateMachine(fsmContext, transitionMap, stateToRootMap)
         }
 
         override fun toString(): String {
